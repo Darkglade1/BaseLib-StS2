@@ -55,6 +55,7 @@ public static class ModAudio
         _ => 0
     };
 
+    //See NDebugAudioManager; godot bus volumes are set
     private static float MasterVol => SaveManager.Instance.SettingsSave.VolumeMaster;
     private static float VolumeForSound(SoundType soundType) => soundType switch
     {
