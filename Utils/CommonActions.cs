@@ -141,7 +141,18 @@ public static class CommonActions
     /// <returns></returns>
     public static async Task<decimal> CardBlock(CardModel card, CardPlay? play)
     {
-        return await CardBlock(card, card.DynamicVars.Block, play);
+        if (card.DynamicVars.TryGetValue(BlockVar.defaultName, out var blockVar))
+        {
+            return await CardBlock(card, blockVar, play);
+        }
+        else if (card.DynamicVars.TryGetValue(CalculatedBlockVar.defaultName, out blockVar))
+        {
+            return await CardBlock(card, blockVar, play);
+        }
+
+        throw new InvalidOperationException(
+            $"No valid block var found in card {card.GetType()} for CommonActions.CardBlock; define a block var or " +
+            "pass a variable in manually.");
     }
 
     /// <summary>
