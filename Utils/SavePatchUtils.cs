@@ -10,6 +10,35 @@ namespace BaseLib.Utils;
 //Utilities to help with adding properties to mod saves.
 public class SavePatchUtils
 {
+    protected static readonly HashSet<Type> SupportedTypes =
+    [
+        typeof(int),
+        typeof(bool),
+        typeof(string),
+        typeof(ModelId),
+        typeof(int[]),
+        typeof(SerializableCard),
+        typeof(SerializableCard[]),
+        typeof(List<SerializableCard>),
+    ];
+
+    /// <summary>
+    /// Returns true if the given type can be stored by basegame SavedProperty.
+    /// </summary>
+    public static bool IsStoreTypeBaseSupported(Type t) =>
+        SupportedTypes.Contains(t) || t.IsEnum || (t.IsArray && t.GetElementType()!.IsEnum);
+    
+    /// <summary>
+    /// Returns true if the given type supports holding basegame SavedProperty values.
+    /// </summary>
+    /// <param name="t"></param>
+    /// <returns></returns>
+    public static bool IsHolderTypeBaseSupported(Type t)
+    {
+        return t.IsAssignableTo(typeof(RelicModel))
+               || t.IsAssignableTo(typeof(CardModel));
+    }
+    
     /// <summary>
     /// Quickly sets up the properties of a JsonPropertyInfoValues object for an actual property.
     /// </summary>
@@ -66,12 +95,6 @@ public class SavePatchUtils
             PropertyName = propName,
             JsonPropertyName = propName
         };
-    }
-
-    public static bool IsTypeSupportedSavedProperty(Type fieldTargetType)
-    {
-        return fieldTargetType.IsAssignableTo(typeof(RelicModel))
-               || fieldTargetType.IsAssignableTo(typeof(CardModel));
     }
 
     public static bool TryGetSerializerDeserializer<T>(

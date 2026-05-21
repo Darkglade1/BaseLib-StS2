@@ -3,6 +3,7 @@ using BaseLib.Abstracts;
 using BaseLib.Extensions;
 using BaseLib.Patches.Content;
 using BaseLib.Patches.Features;
+using BaseLib.Patches.Saves;
 using BaseLib.Patches.Utils;
 using BaseLib.Utils;
 using HarmonyLib;
@@ -85,17 +86,31 @@ class PostModInitPatch
                 var savedPropertyAttr = prop.GetCustomAttribute<SavedPropertyAttribute>();
                 if (savedPropertyAttr == null) continue;
                 if (prop.DeclaringType == null) continue;
-
+                
                 if (prop.DeclaringType.GetRootNamespace() != "MegaCrit")
                 {
                     var prefix = prop.DeclaringType.GetRootNamespace() + "_";
                     if (prop.Name.Length < 16 && !prop.Name.StartsWith(prefix))
                     {
-                        BaseLibMain.Logger.Warn($"Recommended to add a prefix such as \"{prefix}\" to SavedProperty {prop.Name} for compatibility.");
+                        BaseLibMain.Logger.Warn($"Recommended to add a prefix such as \"{prefix}\" to SavedProperty {prop.Name} for reduced likelihood of name clashes.");
                     }
                 }
-                
-                hasSavedProperty = true;
+
+                if (!SavePatchUtils.IsStoreTypeBaseSupported(prop.PropertyType))
+                {
+                    BaseLibMain.Logger.Warn($"SavedProperty does not support values of type {prop.PropertyType}; change {type.Name}.{prop.Name} to a SavedSpireField for BaseLib to save it.");
+                }
+                else if (!SavePatchUtils.IsHolderTypeBaseSupported(prop.DeclaringType))
+                {
+                    var endMsg = ExtendedSaveTypes.IsSaveHolderSupported(type)
+                        ? "change to a SavedSpireField for BaseLib to save it."
+                        : "this type is currently also unsupported by BaseLib for saved values.";
+                    BaseLibMain.Logger.Warn($"SavedProperty {prop.Name} will not work on type {type.Name}; {endMsg}");
+                }
+                else
+                {
+                    hasSavedProperty = true;
+                }
             }
 
             foreach (var field in type.GetFields(BindingFlags.Static | BindingFlags.Public | BindingFlags.NonPublic))

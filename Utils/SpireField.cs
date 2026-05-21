@@ -201,21 +201,6 @@ public class AddedNode<TParentType, TNode> : ReadonlySpireField<TParentType, TNo
 
 internal interface ISavedSpireField
 {
-    protected static readonly HashSet<Type> SupportedTypes =
-    [
-        typeof(int),
-        typeof(bool),
-        typeof(string),
-        typeof(ModelId),
-        typeof(int[]),
-        typeof(SerializableCard),
-        typeof(SerializableCard[]),
-        typeof(List<SerializableCard>),
-    ];
-    
-    protected static bool IsTypeSupported(Type t) =>
-        SupportedTypes.Contains(t) || t.IsEnum || (t.IsArray && t.GetElementType()!.IsEnum);
-
     public bool IsBasegameSupported { get; }
 
     string Name { get; }
@@ -240,7 +225,7 @@ public class SavedSpireField<TKey, TVal> : SpireField<TKey, TVal>, ISavedSpireFi
         string typeName = typeof(TKey).Name;
         Name = $"{typeName}_{name}";
         
-        if (!ISavedSpireField.IsTypeSupported(typeof(TVal)) || !SavePatchUtils.IsTypeSupportedSavedProperty(typeof(TKey)))
+        if (!SavePatchUtils.IsStoreTypeBaseSupported(typeof(TVal)) || !SavePatchUtils.IsHolderTypeBaseSupported(typeof(TKey)))
         {
             IsBasegameSupported = false;
         }

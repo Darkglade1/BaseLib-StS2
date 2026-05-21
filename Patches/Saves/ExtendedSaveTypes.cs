@@ -1,6 +1,7 @@
 ﻿using System.Reflection;
 using System.Text.Json;
 using System.Text.Json.Serialization.Metadata;
+using BaseLib.Utils;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Entities.Players;
 using MegaCrit.Sts2.Core.Models;
