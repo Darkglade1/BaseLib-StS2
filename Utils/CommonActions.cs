@@ -5,6 +5,7 @@ using MegaCrit.Sts2.Core.Commands;
 using MegaCrit.Sts2.Core.Commands.Builders;
 using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.Extensions;
 using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Localization;
 using MegaCrit.Sts2.Core.Localization.DynamicVars;
@@ -401,5 +402,39 @@ public static class CommonActions
                 .ToList();
         }
         return (await CardSelectCmd.FromSimpleGrid(context, cards, card.Owner, prefs)).FirstOrDefault();
+    }
+    
+    
+    /// <summary>
+    /// Applies a power of type <typeparamref name="T"/> to the appropriate creature(s) based on
+    /// the card's <see cref="TargetType"/>, handling both vanilla and custom target types.
+    /// </summary>
+    /// <typeparam name="T">The <see cref="PowerModel"/> type to apply.</typeparam>
+    /// <param name="ctx">The player choice context for the current action.</param>
+    /// <param name="card">The card being played, used to determine targeting behaviour.</param>
+    /// <param name="cardPlay">
+    /// The card play instance carrying the selected target for single-target cards.
+    /// May be <see langword="null"/> for untargeted cards.
+    /// </param>
+    /// <returns>
+    /// A list of all applied power instances, or an empty list if no valid targets were found.
+    /// </returns>
+    public static async Task<IReadOnlyList<T>> Apply<T>(PlayerChoiceContext ctx, CardModel card, CardPlay? cardPlay) where T : PowerModel
+    {
+        if (cardPlay?.Target != null)
+        {
+            return await Apply<T>(ctx, cardPlay.Target, card) is { } result ? [result] : [];
+        }
+
+        return await ApplyToCreatures<T>(card, ctx, card.GetTargets());
+    }
+    
+    private static async Task<IReadOnlyList<T>> ApplyToCreatures<T>(CardModel card, PlayerChoiceContext ctx, params Creature[] targets) where T : PowerModel
+    {
+        return await Apply<T>(ctx, targets, card);
+    }
+    private static async Task<IReadOnlyList<T>> ApplyToCreatures<T>(CardModel card, PlayerChoiceContext ctx, IEnumerable<Creature> targets) where T : PowerModel
+    {
+        return await Apply<T>(ctx, targets, card);
     }
 }

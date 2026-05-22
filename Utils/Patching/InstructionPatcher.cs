@@ -96,9 +96,6 @@ public class InstructionPatcher(IEnumerable<CodeInstruction> instructions)
     /// <summary>
     /// Gets all labels attached to the current instruction.
     /// </summary>
-    /// <param name="labels"></param>
-    /// <returns></returns>
-    /// <exception cref="Exception"></exception>
     public InstructionPatcher GetLabels(out List<Label> labels)
     {
         if (_index < 0) throw new Exception("Attempted to GetLabels without any match found");
@@ -109,11 +106,35 @@ public class InstructionPatcher(IEnumerable<CodeInstruction> instructions)
         {
             if (_code[_index].operand is Label)
             {
-                throw new Exception($"Code instruction {_code[_index].ToString()} has no labels. Did you mean to use GetOperandLabel instead?");
+                BaseLibMain.Logger.Info($"Code instruction {_code[_index]} has no labels. Did you mean to use GetOperandLabel instead?");
             }
             else
             {
-                throw new Exception($"Code instruction {_code[_index].ToString()} has no labels");
+                BaseLibMain.Logger.Info($"Code instruction {_code[_index]} has no labels");
+            }
+        }
+
+        return this;
+    }
+    
+    /// <summary>
+    /// Gets and removes all labels attached to the current instruction.
+    /// </summary>
+    public InstructionPatcher TakeLabels(out List<Label> labels)
+    {
+        if (_index < 0) throw new Exception("Attempted to GetLabels without any match found");
+
+        labels = _code[_index].ExtractLabels();
+
+        if (labels.Count == 0)
+        {
+            if (_code[_index].operand is Label)
+            {
+                BaseLibMain.Logger.Info($"Code instruction {_code[_index]} has no labels. Did you mean to use GetOperandLabel instead?");
+            }
+            else
+            {
+                BaseLibMain.Logger.Info($"Code instruction {_code[_index]} has no labels");
             }
         }
 
@@ -394,7 +415,7 @@ public class InstructionPatcher(IEnumerable<CodeInstruction> instructions)
     {
         if (_index < 0) throw new Exception("Attempted to CopyMatch without any match found");
 
-        match = _code.GetRange(_lastMatchStart, _index - _lastMatchStart);
+        match = _code.GetRange(_lastMatchStart, _index - _lastMatchStart).Select(instruction => instruction.Clone()).ToList();
         
         Log.Add($"Copied {match.Count} instructions:\n");
         foreach (var instruction in match)

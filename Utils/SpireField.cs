@@ -1,8 +1,10 @@
 using System.Runtime.CompilerServices;
+using BaseLib.Patches.Saves;
 using BaseLib.Patches.Utils;
 using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Models;
+using MegaCrit.Sts2.Core.Multiplayer.Serialization;
 using MegaCrit.Sts2.Core.Saves.Runs;
 
 namespace BaseLib.Utils;
@@ -44,6 +46,68 @@ public class SpireField<TKey, TVal> where TKey : class
     public void Set(TKey obj, TVal? val)
     {
         _table.AddOrUpdate(obj, val);
+    }
+}
+
+/// <summary>
+/// A SpireField containing an object whose value is guaranteed to not be null.
+/// </summary>
+public class NotNullSpireField<TKey, TVal> where TKey : class where TVal : class
+{
+    private readonly ConditionalWeakTable<TKey, TVal> _table = [];
+    private readonly Func<TKey, TVal> _defaultVal;
+    
+    public NotNullSpireField(Func<TVal> defaultVal)
+    {
+        _defaultVal = _ => defaultVal();
+    }
+
+    public NotNullSpireField(Func<TKey, TVal> defaultVal)
+    {
+        _defaultVal = defaultVal;
+    }
+    
+    public TVal this[TKey obj]
+    {
+        get => Get(obj);
+        set => Set(obj, value);
+    }
+
+    public TVal Get(TKey obj) {
+        if (_table.TryGetValue(obj, out var result)) return result;
+
+        var defaultVal = _defaultVal(obj);
+        _table.Add(obj, defaultVal);
+        return defaultVal;
+    }
+
+    public void Set(TKey obj, TVal val)
+    {
+        _table.AddOrUpdate(obj, val);
+    }
+}
+
+public class ReadonlySpireField<TKey, TVal> : NotNullSpireField<TKey, TVal> where TKey : class where TVal : class
+{
+    /// <inheritdoc />
+    public ReadonlySpireField(Func<TVal> defaultVal) : base(defaultVal)
+    {
+        
+    }
+
+    /// <inheritdoc />
+    public ReadonlySpireField(Func<TKey, TVal> defaultVal) : base(defaultVal)
+    {
+        
+    }
+    
+    /// <summary>
+    /// Throws an exception if called.
+    /// </summary>
+    [Obsolete("ReadonlySpireField cannot be set; exception will be thrown.")]
+    public new void Set(TKey obj, TVal? val)
+    {
+        throw new InvalidOperationException("The value of a ReadonlySpireField should not be set. If possible, modify its current value instead.");
     }
 }
 
@@ -105,7 +169,7 @@ internal interface IAddedNodes<TParentType> where TParentType : Node
 /// <summary>
 /// Adds a node as a child to all instances of the specified parent node type.
 /// </summary>
-public class AddedNode<TParentType, TNode> : SpireField<TParentType, TNode>, IAddedNodes<TParentType> where TParentType : Node where TNode : Node
+public class AddedNode<TParentType, TNode> : ReadonlySpireField<TParentType, TNode>, IAddedNodes<TParentType> where TParentType : Node where TNode : Node
 {
     
     public AddedNode(Func<TParentType, TNode> defaultVal) : base(defaultVal)
@@ -128,11 +192,6 @@ public class AddedNode<TParentType, TNode> : SpireField<TParentType, TNode>, IAd
             return scene;
         })
     { }
-    
-    public new void Set(TParentType obj, TNode? val)
-    {
-        throw new InvalidOperationException("The value of an AddedNode should not be set. Instead, modify the node already within the scene.");
-    }
 
     public Node? GetNode(TParentType obj)
     {
@@ -142,25 +201,13 @@ public class AddedNode<TParentType, TNode> : SpireField<TParentType, TNode>, IAd
 
 internal interface ISavedSpireField
 {
-    protected static readonly HashSet<Type> SupportedTypes =
-    [
-        typeof(int),
-        typeof(bool),
-        typeof(string),
-        typeof(ModelId),
-        typeof(int[]),
-        typeof(SerializableCard),
-        typeof(SerializableCard[]),
-        typeof(List<SerializableCard>),
-    ];
-    
-    protected static bool IsTypeSupported(Type t) =>
-        SupportedTypes.Contains(t) || t.IsEnum || (t.IsArray && t.GetElementType()!.IsEnum);
-    
+    public bool IsBasegameSupported { get; }
+
     string Name { get; }
     Type TargetType { get; }
     void Export(object model, SavedProperties props);
     void Import(object model, SavedProperties props);
+    bool RegisterCustomSave();
 }
 
 /// <summary>
@@ -177,30 +224,82 @@ public class SavedSpireField<TKey, TVal> : SpireField<TKey, TVal>, ISavedSpireFi
     {
         string typeName = typeof(TKey).Name;
         Name = $"{typeName}_{name}";
-        if (!ISavedSpireField.IsTypeSupported(typeof(TVal)))
+        
+        if (!SavePatchUtils.IsStoreTypeBaseSupported(typeof(TVal)) || !SavePatchUtils.IsHolderTypeBaseSupported(typeof(TKey)))
         {
-            throw new NotSupportedException(
-                $"SavedSpireField {name} uses unsupported type {typeof(TVal).Name}."
-            );
+            IsBasegameSupported = false;
+        }
+        else
+        {
+            IsBasegameSupported = true;
         }
         
         SavedSpireFieldPatch.Register(this);
     }
-    
+
+    public bool IsBasegameSupported { get; init; }
+
     public string Name { get; }
     public Type TargetType { get; } = typeof(TKey);
 
+    /// <summary>
+    /// Used to serialize value over net when custom save is used (value/target type not compatible with SavedProperty)
+    /// </summary>
+    public Action<TVal, PacketWriter>? Serializer { get; set; } = null;
+    /// <summary>
+    /// Used to deserialize value over net when custom save is used (value/target type not compatible with SavedProperty)
+    /// </summary>
+    public Func<PacketReader, TVal>? Deserializer { get; set; } = null;
+
+    /// <summary>
+    /// Store value in a SavedProperties instance.
+    /// </summary>
     public void Export(object model, SavedProperties props)
     {
         AddToProperties(props, Name, Get((TKey)model));
     } 
 
+    /// <summary>
+    /// Load value from a SavedProperties instance.
+    /// </summary>
     public void Import(object model, SavedProperties props)
     {
         if (TryGetFromProperties<TVal>(props, Name, out var val))
             Set((TKey)model, val);
     }
-    
+
+    public bool RegisterCustomSave()
+    {
+        Action<TVal, PacketWriter>? serializer = Serializer;
+        Func<PacketReader, TVal>? deserializer = Deserializer;
+        if (serializer == null || deserializer == null)
+        {
+            if (typeof(TVal).IsAssignableTo(typeof(IPacketSerializable)))
+            {
+                serializer = (val, writer) => ((IPacketSerializable)val!).Serialize(writer);
+                deserializer = (reader) =>
+                {
+                    var val = (TVal)typeof(TVal).CreateInstance();
+                    ((IPacketSerializable)val).Deserialize(reader);
+                    return val;
+                };
+            }
+            else if (!SavePatchUtils.TryGetSerializerDeserializer(out serializer, out deserializer))
+            {
+                BaseLibMain.Logger.Error($"Unable to register custom save for SavedSpireField {Name}; no serialization defined for" +
+                                         $"type {typeof(TVal).Name}. Set Serializer/Deserializer properties of SavedSpireField.");
+                return false;
+            }
+        }
+
+        if (!ExtendedSaveTypes.IsSaveTypeSupported(typeof(TVal)))
+        {
+            throw new ArgumentException($"Type {typeof(TVal).Name} is not registered for saving; register the type with ExtendedSaveTypes in your mod's initializer.");
+        }
+        
+        return ExtendedSaveTypes.RegisterSavedValue<TKey, TVal>($"spirefield_{Name}", Get, Set, serializer, deserializer);
+    }
+
     private static void AddToProperties(SavedProperties props, string name, object? value)
     {
         switch (value)

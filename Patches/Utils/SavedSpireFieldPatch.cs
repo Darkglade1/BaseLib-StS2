@@ -1,5 +1,6 @@
-using System.Reflection;
+using BaseLib.Patches.Saves;
 using BaseLib.Utils;
+using Godot;
 using HarmonyLib;
 using MegaCrit.Sts2.Core.Saves.Runs;
 
@@ -50,7 +51,14 @@ static class SavedSpireFieldPatch
 
         foreach (var field in RegisteredFields)
         {
-            InjectNameIntoBaseGameCache(field.Name);
+            if (field.IsBasegameSupported)
+            {
+                InjectNameIntoBaseGameCache(field.Name);
+            }
+            else if (!field.RegisterCustomSave())
+            {
+                BaseLibMain.Logger.Error($"SavedSpireField {field.Name} will not be saved as it is of an unsupported type.");
+            }
         }
     }
     
@@ -70,7 +78,7 @@ static class SavedSpireFieldPatch
             propertyToId[name] = idToProperty.Count;
             idToProperty.Add(name);
 
-            int newBitSize = (int)Math.Ceiling(Math.Log2(idToProperty.Count));
+            int newBitSize = Mathf.CeilToInt(Math.Log2(idToProperty.Count));
 
             AccessTools
                 .Property(typeof(SavedPropertiesTypeCache), "NetIdBitSize")
