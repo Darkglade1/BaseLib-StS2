@@ -4,7 +4,9 @@ using BaseLib.Patches.Localization;
 using BaseLib.Patches.Saves;
 using BaseLib.Utils;
 using HarmonyLib;
+using MegaCrit.Sts2.Core.Entities.Cards;
 using MegaCrit.Sts2.Core.Entities.Creatures;
+using MegaCrit.Sts2.Core.GameActions.Multiplayer;
 using MegaCrit.Sts2.Core.Modding;
 using MegaCrit.Sts2.Core.Models;
 using MegaCrit.Sts2.Core.Multiplayer.Serialization;
@@ -161,17 +163,14 @@ public abstract class CardModifier : AbstractModel
     /// </summary>
     public static void AddModifier(CardModel card, CardModifier modifier)
     {
-        DirectModifiers(card).Add(modifier);
-        modifier.Owner = card;
+        modifier.ApplyInternal(card);
     }
 
     public static bool RemoveModifier(CardModel card, CardModifier modifier)
     {
-        if (modifier.Owner == card)
-            modifier.Owner = null;
-        return DirectModifiers(card).Remove(modifier);
+        return modifier.RemoveInternal(card);
     }
-    
+
     static CardModifier()
     {
         ModHelper.SubscribeForCombatStateHooks("BaseLibCardModifiers",
@@ -219,6 +218,20 @@ public abstract class CardModifier : AbstractModel
         get; 
         private set;
     }
+    
+    private void ApplyInternal(CardModel card)
+    {
+        DirectModifiers(card).Add(this);
+        Owner = card;
+        OnInitialApplication();
+    }
+
+    private bool RemoveInternal(CardModel card)
+    {
+        if (Owner == card)
+            Owner = null;
+        return DirectModifiers(card).Remove(this);
+    }
 
     /// <summary>
     /// Modifies a card's description before the game processes it.
@@ -239,11 +252,29 @@ public abstract class CardModifier : AbstractModel
     }
 
     /// <summary>
+    /// Called after the modifier is applied to a card, including when a card is copied.
+    /// Due to nature of when this occurs, async combat effects should not occur here.
+    /// </summary>
+    public virtual void OnInitialApplication()
+    {
+        
+    }
+
+    /// <summary>
     /// Called after the card modifier is cloned and added to a clone of a card.
+    /// Called whenever a MutableClone is created.
     /// </summary>
     public virtual void AfterClonedOnCard(CardModel card)
     {
         
+    }
+    
+    /// <summary>
+    /// Called after the card's OnPlay method is called. Occurs before normal AfterCardPlayed hook.
+    /// </summary>
+    public virtual Task OnPlay(PlayerChoiceContext choiceContext, CardPlay cardPlay)
+    {
+        return Task.CompletedTask;
     }
 }
 
