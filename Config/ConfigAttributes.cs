@@ -297,3 +297,18 @@ public class ConfigColorPickerAttribute : Attribute
     /// </summary>
     public bool EditIntensity { get; set; } = false;
 }
+
+/// <summary>
+/// <para>Overrides the default localization key based on property name for certain UI elements.</para>
+/// <para>Apply this attribute to multiple properties that should share the same localization entries.
+/// When specified, the provided override value is used instead of the property name when generating
+/// localization keys.</para>
+/// <para>For example, if two dropdowns <c>CardOption1</c> and <c>CardOption2</c> use an override value of
+/// <c>CARD_OPTIONS</c>, a dropdown enum value <c>BladeOfInk</c> will use the key
+/// <c>{modName}-CARD_OPTIONS.BladeOfInk</c> for both properties.</para>
+/// </summary>
+[AttributeUsage(AttributeTargets.Property)]
+public class ConfigOverrideLocalizationAttribute(string overridePropertyName) : Attribute
+{
+    public string OverridePropertyName { get; } = overridePropertyName;
+}
